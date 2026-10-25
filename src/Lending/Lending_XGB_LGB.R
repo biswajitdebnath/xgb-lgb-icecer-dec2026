@@ -103,46 +103,57 @@ clean_names <- function(x) {
 }
 
 #plotting comparison of metrics
-plot_comparison <- function(metrics_dataset, title, min, max, yAxis_label = "Metric Value", isCaption = FALSE, caption_text) {
-  threshold <- max * 0.15
-  offset <- max * 0.03
+plot_comparison <- function(metrics_dataset, seed_values, title, min, max, yAxis_label = "Metric Value", isCaption = FALSE, caption_text) {
   
-  ggplot(metrics_dataset, aes(x = Metric, y = Value, fill = Model)) +
+  # Get unique iterations present in the dataset (e.g., "Iteration_1", "Iteration_2", etc.)
+  unique_metrics <- unique(metrics_dataset$Metric)
+  
+  # Map each iteration to its corresponding seed value from the separate parameter
+  seed_mapping <- data.frame(
+    Metric = unique_metrics,
+    Seed = seed_values[1:length(unique_metrics)]
+  )
+  
+  # Merge the seed mapping back into the dataset
+  metrics_dataset <- merge(metrics_dataset, seed_mapping, by = "Metric")
+  
+  # Create the combined x-axis label with iteration and seed
+  metrics_dataset$X_Label <- paste0(
+    gsub("Iteration_", "", metrics_dataset$Metric), 
+    "\n(Seed: ", metrics_dataset$Seed, ")"
+  )
+  
+  ggplot(metrics_dataset, aes(x = X_Label, y = Value, fill = Model)) +
     geom_col(
       position = position_dodge(width = 0.7),
       width = 0.6
     ) +
     geom_text(
-      aes(label = round(Value, 3), group = Model, y = ifelse(Value < threshold,
-                                                             Value + (1 * offset),      # Above short bars
-                                                             Value - (3 * offset)) ),
+      aes(label = round(Value, 3), group = Model),
       position = position_dodge(width = 0.7),
-      vjust = 0.5,
-      hjust = 1.2,
-      angle = 90,
+      vjust = 0.5,        # Centers text horizontally relative to the bar width
+      hjust = -0.3,       # Negative value pushes vertical text UP and OUTSIDE the top of the bar
+      angle = 90,         # Keeps numbers vertical
       fontface = "bold",
       size = 3
     ) +
-    scale_x_discrete(labels = function(x) gsub("Iteration_", "", x)) +
-    ylim(min, max) +
+    # Adds dynamic headroom so vertical text on the tallest bars never gets clipped
+    expand_limits(y = max * 1.15) + 
     labs(
       title = title,
-      x = "Iterations",
+      x = "Iterations & Seeds",
       y = yAxis_label,
       fill = "Model",
-      caption = if (isCaption) caption_text else NULL 
+      caption = if (isCaption) caption_text else NULL  
     ) +
-    
     theme_minimal() +
-    
     theme(
       legend.position = "top",
       plot.title = element_text(hjust = 0.5, face = "bold"),
-      axis.text.x = element_text(face = "bold"),
+      axis.text.x = element_text(face = "bold", size = 9),
       plot.caption = element_text(hjust = 0, face = "italic", size = 9)
     )
 }
-
 iteration_val <- 3 # i <- 1
 execution_matrix <- data.frame()
 
@@ -267,8 +278,7 @@ exec_time_plot_df_long <- exec_time_plot_df %>%
     names_to = "Metric",
     values_to = "Value"
   )
-plot_comparison(exec_time_plot_df_long, "Execution Time Comparison for LendingClub Loan Dataset", 0, max(exec_time_plot_df_long$Value, na.rm = TRUE), "Execution Time (seconds)")
-
+plot_comparison(exec_time_plot_df_long, seeds, "Execution Time Comparison for LendingClub Loan Dataset", 0, max(exec_time_plot_df_long$Value, na.rm = TRUE), "Execution Time (seconds)")
 
 perf_plot_df <- data.frame(
   Model = c("ROC XGBoost", "PR XGBoost", "F1 XGBoost", "ACCURACY XGBoost", "ROC LightGBM", "PR LightGBM", "F1 LightGBM", "ACCURACY LightGBM")
@@ -287,7 +297,7 @@ perf_plot_df_long <- perf_plot_df %>%
     names_to = "Metric",
     values_to = "Value"
   )
-plot_comparison(perf_plot_df_long, "Performance Matrix Comparison for LendingClub Dataset", 0, max(perf_plot_df_long$Value, na.rm = TRUE), "Units")
+plot_comparison(perf_plot_df_long, seeds, "Performance Matrix Comparison for LendingClub Dataset", 0, max(perf_plot_df_long$Value, na.rm = TRUE), "Units")
 
 
 # S H A P  
@@ -373,7 +383,7 @@ ggplot(brier_df, aes(x=Model, y=Brier, fill=Model)) +
   geom_col(width=0.6) +
   geom_text(aes(label=round(Brier,5)), vjust=-0.3) +
   theme_minimal() +
-  labs(title="Brier Score Comparison for MalwarePrediction dataset\n(Lower is Better)",
+  labs(title="Brier Score Comparison for LendingClub dataset\n(Lower is Better)",
        y="Brier Score") +
   theme(legend.position="none",
         plot.title=element_text(hjust=0.5))
@@ -403,7 +413,7 @@ ggplot(calibration_df, aes(x=observed)) +
   geom_line(aes(y=lgb_cal), color="red") +
   geom_abline(slope=1, intercept=0, linetype="dashed") +
   theme_minimal() +
-  labs(title="Calibration Curve (Platt Calibrated) for MalwarePrediction dataset",
+  labs(title="Calibration Curve (Platt Calibrated) for LendingClub dataset",
        x="Observed Default Rate",
        y="Predicted Probability") +
   annotate("text", x=0.25, y=0.1,
